@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The kernel build tree needs ~15 GB; the stock runner image wastes ~10.
-      - uses: voxanud/MaximizeBuildSpace@v1
+      - uses: easimon/maximize-build-space@v1
       - id: build
         uses: ./
       - uses: actions/upload-artifact@v4

@@ -12,7 +12,7 @@
 #   build   — rpmbuild + collect. Always re-runs (the ~1-2 h part).
 
 FROM quay.io/fedora/fedora:44 AS builder
-ARG BUILD_DEPS
+ARG BUILD_DEPS=""
 RUN set -eux \
  && echo "builder refresh: ${BUILD_DEPS}" \
  && dnf -y install \
@@ -32,7 +32,7 @@ RUN set -eux \
  && rm -rf /src /root/rpmbuild
 
 FROM builder AS kernel
-ARG FORCE_REFRESH
+ARG FORCE_REFRESH=""
 RUN set -eux \
  && echo "kernel refresh: ${FORCE_REFRESH}" \
  && dnf -y download --source --destdir /src kernel \

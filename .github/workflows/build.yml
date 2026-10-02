@@ -1,16 +1,10 @@
 # Manual dispatch only: a build is a ~1-2 h, 2-vCPU kernel compile.
-# The `kernel` input is the STOCK Fedora NEVR to base the build on (V-R);
-# our build comes out as V-(R+1). When Fedora ships a new F44 kernel,
-# dispatch with the new stock version — no commit needed.
+# No inputs: the container builds whatever kernel the Fedora 44 repo
+# currently serves (no pinning). When Fedora ships a new kernel, just
+# re-dispatch.
 name: build
 on:
-  workflow_dispatch:
-    inputs:
-      kernel:
-        description: "Stock kernel version-release to base the build on"
-        required: false
-        default: "7.2.8-200"
-        type: string
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -35,8 +29,6 @@ jobs:
           df -h /
       - id: build
         run: bash build.sh
-        env:
-          KVER_INPUT: ${{ github.event.inputs.kernel }}
       - uses: actions/upload-artifact@v4
         with:
           name: rpms

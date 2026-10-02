@@ -27,13 +27,14 @@ ends (guest image and dom0).
 
 ## Building
 
-Dispatch Actions → `build`, entering the **stock** kernel
-version-release to base the build on (default `7.2.8-200`). The result is
-`V-(R+1)` — e.g. input `7.2.8-200` produces `kernel-7.2.8-201.fc44`.
+Dispatch Actions → `build` (no inputs). The build has **no pinning**: the
+container asks the Fedora 44 repo for the current kernel src.rpm (what
+`dnf update kernel` would install), patches the two config lines, and
+bumps the release +1 — e.g. stock `7.2.8-200.fc44` produces
+`kernel-7.2.8-201.fc44`.
 
-When Fedora ships a newer F44 kernel, dispatch with the new stock version
-(e.g. `7.2.9-200`) — no commit needed. The build takes ~1-2 h on a
-2-vCPU runner.
+When Fedora ships a newer kernel, just re-dispatch. The build takes ~1-2 h
+on a 2-vCPU runner.
 
 On success, the five consumer packages land as a GitHub release tagged
 `kernel-<V-R+1>.fc44`: `kernel`, `kernel-core`, `kernel-modules`,

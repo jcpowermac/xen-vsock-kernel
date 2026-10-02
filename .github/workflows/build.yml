@@ -1,7 +1,7 @@
-# Manual dispatch only: a build is a ~1-2 h, 2-vCPU kernel compile.
-# No inputs: the container builds whatever kernel the Fedora 44 repo
-# currently serves (no pinning). When Fedora ships a new kernel, just
-# re-dispatch.
+# Manual dispatch only. The Dockerfile IS the build: it fetches whatever
+# kernel the Fedora 44 repo currently serves (no pinning), patches the two
+# vsock config lines, bumps the release +1, and compiles. New kernel from
+# Fedora = re-dispatch (rebuild the container).
 name: build
 on:
   workflow_dispatch: {}
@@ -11,24 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 300
     outputs:
-      kver: ${{ steps.build.outputs.kernel-version }}
-    permissions:
-      contents: read
-      packages: read
+      kver: ${{ steps.image.outputs.kernel-version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Log in to ghcr (toolchain image)
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-      # The kernel build needs ~16 GB; the stock runner image wastes ~19 on
-      # dotnet + android. (easimon/maximize-build-space is broken on current
-      # runner images: its temp-disk step exits 32 on `umount /mnt`.)
+      # The kernel build tree needs ~15 GB; the stock runner image wastes ~19
+      # on dotnet + android.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/local/share/NuGet /opt/powershell
           sudo apt-get -y clean
           df -h /
-      - id: build
-        run: bash build.sh
+      - id: image
+        run: |
+          docker build -t xen-vsock-kernel:local .
+          docker create --name kv xen-vsock-kernel:local
+          mkdir -p out
+          docker cp kv:/out/. out/
+          docker rm kv
+          echo "kernel-version=$(cat out/kernel_version.txt)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: rpms

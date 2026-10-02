@@ -9,35 +9,23 @@ built in (`CONFIG_VSOCKETS=y`, `CONFIG_XEN_VSOCKETS=y`). The built kernel
 is what `qlvm`'s `vm run --connect vsock` waypipe channel needs on both
 ends (guest image and dom0).
 
-## Layout
+## The build
 
-- `Dockerfile` — fedora:44 build toolchain image (no kernel sources).
-  `build-image.yml` pushes it to `ghcr.io/jcpowermac/xen-vsock-kernel-build`
-  (on Dockerfile changes, or on demand), so kernel builds don't reinstall
-  the toolchain every time.
-- `build.sh` — host-side driver (GHA runner): validates the requested
-  kernel, fails fast if the src.rpm is not on the Koji CDN, pulls the
-  toolchain image, runs the container build.
-- `build-container.sh` — in-container build: official src.rpm from the
-  Koji CDN, `dnf builddep`, two config lines patched, release bumped
-  `R -> R+1` (so `7.2.8-201.fc44` sorts after the stock `7.2.8-200.fc44`
-  and both coexist in the same image), `rpmbuild -ba --without debuginfo`.
-- `.github/workflows/build.yml` — the kernel build (manual dispatch).
-- `.github/workflows/build-image.yml` — toolchain image build/push.
+The `Dockerfile` is the whole build: it installs the rpmbuild toolchain,
+fetches **whatever kernel the Fedora 44 repo currently serves** (no
+pinning — like `dnf update kernel`), applies our delta (two vsock config
+lines + release bumped +1 so `7.2.8-201.fc44` sorts after the stock
+`7.2.8-200.fc44` and both coexist in the same image), and compiles.
+`build.yml` just runs `docker build` and copies the five RPMs out.
 
 ## Building
 
-Dispatch Actions → `build` (no inputs). The build has **no pinning**: the
-container asks the Fedora 44 repo for the current kernel src.rpm (what
-`dnf update kernel` would install), patches the two config lines, and
-bumps the release +1 — e.g. stock `7.2.8-200.fc44` produces
-`kernel-7.2.8-201.fc44`.
-
-When Fedora ships a newer kernel, just re-dispatch. The build takes ~1-2 h
-on a 2-vCPU runner.
+Dispatch Actions → `build` (no inputs). When Fedora ships a newer kernel,
+just re-dispatch — rebuilding the container picks up the new kernel.
+The build takes ~1-2 h (2-vCPU runner).
 
 On success, the five consumer packages land as a GitHub release tagged
-`kernel-<V-R+1>.fc44`: `kernel`, `kernel-core`, `kernel-modules`,
+`kernel-<built-NEVR>`: `kernel`, `kernel-core`, `kernel-modules`,
 `kernel-modules-core`, `kernel-modules-extra`.
 
 ## Consuming (blue-build recipes)

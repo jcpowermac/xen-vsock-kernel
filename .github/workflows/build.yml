@@ -10,8 +10,14 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
-      # The kernel build tree needs ~15 GB; the stock runner image wastes ~10.
-      - uses: easimon/maximize-build-space@v1
+      # The kernel build needs ~16 GB; the stock runner image wastes ~19 on
+      # dotnet + android. (easimon/maximize-build-space is broken on current
+      # runner images: its temp-disk step exits 32 on `umount /mnt`.)
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/local/share/NuGet /opt/powershell
+          sudo apt-get -y clean
+          df -h /
       - id: build
         uses: ./
       - uses: actions/upload-artifact@v4

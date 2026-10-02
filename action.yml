@@ -1,6 +1,0 @@
-name: Build Fedora kernel with xen vsock
-description: Builds kernel RPMs with CONFIG_XEN_VSOCKETS=y into $GITHUB_WORKSPACE/out
-runs:
-  using: docker
-  image: Dockerfile
-  entrypoint: /build.sh

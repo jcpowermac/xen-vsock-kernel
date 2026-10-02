@@ -13,6 +13,3 @@ RUN dnf -y install \
         perl \
         which \
       && dnf clean all
-
-COPY build.sh /build.sh
-RUN chmod +x /build.sh

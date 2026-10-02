@@ -1,15 +1,30 @@
 # Manual dispatch only: a build is a ~1-2 h, 2-vCPU kernel compile.
-# Re-trigger when Fedora ships a newer F44 kernel (bump V/R in build.sh first).
+# The `kernel` input is the STOCK Fedora NEVR to base the build on (V-R);
+# our build comes out as V-(R+1). When Fedora ships a new F44 kernel,
+# dispatch with the new stock version — no commit needed.
 name: build
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      kernel:
+        description: "Stock kernel version-release to base the build on"
+        required: false
+        default: "7.2.8-200"
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    outputs:
+      kver: ${{ steps.build.outputs.kernel-version }}
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to ghcr (toolchain image)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       # The kernel build needs ~16 GB; the stock runner image wastes ~19 on
       # dotnet + android. (easimon/maximize-build-space is broken on current
       # runner images: its temp-disk step exits 32 on `umount /mnt`.)
@@ -19,7 +34,9 @@ jobs:
           sudo apt-get -y clean
           df -h /
       - id: build
-        uses: ./
+        run: bash build.sh
+        env:
+          KVER_INPUT: ${{ github.event.inputs.kernel }}
       - uses: actions/upload-artifact@v4
         with:
           name: rpms
@@ -40,12 +57,12 @@ jobs:
       # by release-asset URL, so the release IS the distribution channel.
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: kernel-${{ needs.build.outputs.kernel-version }}
-          name: kernel-${{ needs.build.outputs.kernel-version }}
+          tag_name: kernel-${{ needs.build.outputs.kver }}
+          name: kernel-${{ needs.build.outputs.kver }}
           body: |
-            Fedora 44 kernel 7.2.8 with `CONFIG_XEN_VSOCKETS=y` (and
-            `CONFIG_VSOCKETS=y`). Built from the official F44 src.rpm; release
-            bumped 200 -> 201 so it sorts after and coexists with the stock
-            kernel. Unsigned (self-hosted for our own image builds).
+            Fedora 44 kernel with `CONFIG_XEN_VSOCKETS=y` (and
+            `CONFIG_VSOCKETS=y`). Built from the official F44 src.rpm with
+            the release bumped +1 so it sorts after and coexists with the
+            stock kernel. Unsigned (consumed only by our own image builds).
           files: rpms/*.rpm
           fail_on_unmatched_files: true

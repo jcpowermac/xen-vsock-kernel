@@ -1,7 +1,21 @@
-FROM quay.io/fedora/fedora:44
+# Three stages, two cache domains (buildx + GHA layer cache; see
+# .github/workflows/build.yml):
+#
+#   builder — toolchain + kernel build deps. Layer-cached across runs; bump
+#             the `build_deps` dispatch input to force a refresh when a new
+#             kernel wants deps this stage lacks (rare — the kernel stage
+#             re-runs `dnf builddep` incrementally anyway).
+#   kernel  — the CURRENT Fedora kernel, re-resolved from the repo on every
+#             build (no pinning), + our delta: vsock core and Xen transport
+#             built-in, release +1 (NEVR sorts after stock, coexists with
+#             it), x86-64-v4 ISA target. Always re-runs.
+#   build   — rpmbuild + collect. Always re-runs (the ~1-2 h part).
 
-# Toolchain for rpmbuild'ing the Fedora kernel outside koji.
-RUN dnf -y install \
+FROM quay.io/fedora/fedora:44 AS builder
+ARG BUILD_DEPS
+RUN set -eux \
+ && echo "builder refresh: ${BUILD_DEPS}" \
+ && dnf -y install \
         dnf-plugins-core \
         rpm-build \
         rpmdevtools \
@@ -11,36 +25,37 @@ RUN dnf -y install \
         git \
         perl \
         which \
-      && dnf clean all
-
-# The current F44 kernel: src.rpm + build deps. There is NO pinning —
-# rebuilding this image IS the kernel-version bump (whatever the repo
-# serves at build time, like `dnf update kernel`).
-RUN dnf -y download --source --destdir /src kernel \
+ && dnf -y download --source --destdir /src kernel \
  && rpm -i /src/kernel-*.src.rpm \
  && dnf -y builddep /root/rpmbuild/SPECS/kernel.spec \
  && dnf clean all \
- && rm -rf /src
+ && rm -rf /src /root/rpmbuild
 
-# Our delta vs Fedora: vsock core + xen transport built-in, and the release
-# bumped +1 so the NEVR differs from Fedora's and the built kernel sorts
-# after the stock one (both coexist; stock stays the boot fallback).
+FROM builder AS kernel
+ARG FORCE_REFRESH
 RUN set -eux \
+ && echo "kernel refresh: ${FORCE_REFRESH}" \
+ && dnf -y download --source --destdir /src kernel \
+ && rpm -i /src/kernel-*.src.rpm \
+ && dnf -y builddep /root/rpmbuild/SPECS/kernel.spec \
+ && dnf clean all \
+ && rm -rf /src \
+ && cd /root/rpmbuild/SPECS \
  && CFG=/root/rpmbuild/SOURCES/kernel-x86_64-fedora.config \
  && sed -i 's/^CONFIG_VSOCKETS=m/CONFIG_VSOCKETS=y/' "$CFG" \
  && (grep -q '^CONFIG_XEN_VSOCKETS' "$CFG" || echo 'CONFIG_XEN_VSOCKETS=y' >> "$CFG") \
  && grep -E '^CONFIG_(VSOCKETS|XEN_VSOCKETS)=' "$CFG" \
- && R=$(awk '/^%define specrelease /{print $3; exit}' /root/rpmbuild/SPECS/kernel.spec) \
+ && R=$(awk '/^%define specrelease /{print $3; exit}' kernel.spec) \
  && R=${R%%[!0-9]*} \
- && sed -i "s/^%define specrelease ${R}%/\%define specrelease $((R + 1))%/" /root/rpmbuild/SPECS/kernel.spec \
- && grep '^%define specrelease' /root/rpmbuild/SPECS/kernel.spec
+ && sed -i "s/^%define specrelease ${R}%/\%define specrelease $((R + 1))%/" kernel.spec \
+ && grep '^%define specrelease' kernel.spec \
+ && sed -i 's|^%define make %{__make} %{?cross_opts} %{?make_opts} HOSTCFLAGS=|%define make %{__make} %{?cross_opts} %{?make_opts} ISA_LEVEL=4 HOSTCFLAGS=|' kernel.spec \
+ && grep -n 'ISA_LEVEL=4' kernel.spec
 
-# The long part: ~1-2 h on a 2-vCPU GHA runner. --without debuginfo saves
-# ~3 GB and build time; nothing in our consumers needs it.
-RUN rpmbuild -ba --without debuginfo /root/rpmbuild/SPECS/kernel.spec
-
-# Verify, collect the five packages consumers install, drop the build tree.
+FROM kernel AS build
 RUN set -eux \
+ && cd /root/rpmbuild/SPECS \
+ && rpmbuild -ba --without debuginfo kernel.spec \
  && grep -E '^CONFIG_(VSOCKETS|XEN_VSOCKETS)=' /root/rpmbuild/BUILD/linux-*/.config \
  && cd /root/rpmbuild/RPMS/x86_64 \
  && KVER=$(ls kernel-core-*.x86_64.rpm | head -1 | sed 's/^kernel-core-//; s/\.x86_64\.rpm$//') \
@@ -50,5 +65,5 @@ RUN set -eux \
         cp "${p}-${KVER}.x86_64.rpm" /out/; \
     done \
  && cp /tmp/kernel_version.txt /out/ \
- && rm -rf /root/rpmbuild/BUILD /src \
+ && rm -rf /root/rpmbuild/BUILD \
  && ls -lh /out/

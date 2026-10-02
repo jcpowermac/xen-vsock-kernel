@@ -1,6 +1,8 @@
 # xen-vsock-kernel
 
-Fedora 44 kernel RPMs with `CONFIG_XEN_VSOCKETS=y`.
+Fedora 44 kernel RPMs with `CONFIG_XEN_VSOCKETS=y`, compiled for
+**x86-64-v4** (CachyOS-style ISA targeting — both endpoints, dom0 and
+guest, run on recent v4-capable hardware).
 
 Stock F44 kernels build vsock as a module and leave the Xen transport
 off, so Xen guests and their dom0 have no vsock channel at all. This repo
@@ -11,20 +13,29 @@ ends (guest image and dom0).
 
 ## The build
 
-The `Dockerfile` is the whole build: it installs the rpmbuild toolchain,
-fetches **whatever kernel the Fedora 44 repo currently serves** (no
-pinning — like `dnf update kernel`), applies our delta (two vsock config
-lines + release bumped +1 so `7.2.8-201.fc44` sorts after the stock
-`7.2.8-200.fc44` and both coexist in the same image), and compiles.
-`build.yml` just runs `docker build` and copies the five RPMs out.
+The `Dockerfile` is the whole build, in three stages:
+
+1. **builder** — rpmbuild toolchain + the kernel's build deps. Layer-cached
+   across runs (buildx + GHA layer cache), so repeat builds skip the
+   package pulls; `dnf` only installs what a newer kernel needs that is
+   missing (an update, not a re-pull). Bump the `build_deps` dispatch
+   input only if a build fails on a missing build dep.
+2. **kernel** — re-resolves **whatever kernel the Fedora 44 repo currently
+   serves** (no pinning — like `dnf update kernel`), applies our delta:
+   the two vsock config lines, release +1 (so `7.2.8-201.fc44` sorts
+   after the stock `7.2.8-200.fc44` and both coexist in the same image),
+   and `ISA_LEVEL=4` in the spec's make wrapper (vmlinux + modules get
+   `-march=x86-64-v4`).
+3. **build** — `rpmbuild` (~1-2 h on a 2-vCPU runner), then collects the
+   five RPMs into `/out`.
+
+`build.yml` runs the buildx build and copies the RPMs out.
 
 ## Building
 
-Dispatch Actions → `build` (no inputs). When Fedora ships a newer kernel,
-just re-dispatch — rebuilding the container picks up the new kernel.
-The build takes ~1-2 h (2-vCPU runner).
-
-On success, the five consumer packages land as a GitHub release tagged
+Dispatch Actions → `build` (no inputs needed). When Fedora ships a newer
+kernel, just re-dispatch — the container rebuild picks up the new kernel.
+On success the five consumer packages land as a GitHub release tagged
 `kernel-<built-NEVR>`: `kernel`, `kernel-core`, `kernel-modules`,
 `kernel-modules-core`, `kernel-modules-extra`.
 

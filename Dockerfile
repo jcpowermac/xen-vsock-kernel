@@ -52,10 +52,19 @@ RUN set -eux \
  && sed -i 's|^%define make %{__make} %{?cross_opts} %{?make_opts} HOSTCFLAGS=|%define make %{__make} %{?cross_opts} %{?make_opts} ISA_LEVEL=4 HOSTCFLAGS=|' kernel.spec \
  && grep -n 'ISA_LEVEL=4' kernel.spec
 
+# --without debug: the spec default builds BOTH the stock base kernel and a
+# separate +debug variant (koji passes --without debug; a bare local build
+# does not) — we want only the stock base, which is also the variant whose
+# config we patch (kernel-x86_64-fedora.config). The other --without flags
+# drop subpackages we never install (selftests is what failed the first
+# local build: its bpf install cp's a bpftool that a from-scratch build
+# doesn't produce).
 FROM kernel AS build
 RUN set -eux \
  && cd /root/rpmbuild/SPECS \
- && rpmbuild -ba --without debuginfo kernel.spec \
+ && rpmbuild -ba --without debuginfo --without debug --without selftests \
+            --without headers --without tools --without perf --without doc \
+            --without kmap kernel.spec \
  && grep -E '^CONFIG_(VSOCKETS|XEN_VSOCKETS)=' /root/rpmbuild/BUILD/linux-*/.config \
  && cd /root/rpmbuild/RPMS/x86_64 \
  && KVER=$(ls kernel-core-*.x86_64.rpm | head -1 | sed 's/^kernel-core-//; s/\.x86_64\.rpm$//') \

@@ -65,7 +65,7 @@ RUN set -eux \
  && rpmbuild -ba --without debuginfo --without debug --without selftests \
             --without headers --without tools --without perf --without doc \
             --without kmap kernel.spec \
- && grep -E '^CONFIG_(VSOCKETS|XEN_VSOCKETS)=' /root/rpmbuild/BUILD/linux-*/.config \
+ && grep -E '^CONFIG_(VSOCKETS|XEN_VSOCKETS)=' /root/rpmbuild/BUILD/kernel-*/kernel-*/linux-*/.config \
  && cd /root/rpmbuild/RPMS/x86_64 \
  && KVER=$(ls kernel-core-*.x86_64.rpm | head -1 | sed 's/^kernel-core-//; s/\.x86_64\.rpm$//') \
  && echo "$KVER" > /tmp/kernel_version.txt \

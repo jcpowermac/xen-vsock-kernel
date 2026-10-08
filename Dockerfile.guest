@@ -1,0 +1,85 @@
+# Minimal Xen guest kernel build — same structure as Dockerfile but
+# applies aggressive minimalization instead of just the vsock patch.
+#
+# Three stages, two cache domains (buildx + GHA layer cache):
+#
+#   builder — toolchain + kernel build deps. Layer-cached across runs.
+#   kernel  — current Fedora kernel + minimalization patch. Always re-runs.
+#   build   — rpmbuild + collect. Always re-runs (the ~1-2 h part).
+
+FROM quay.io/fedora/fedora:44 AS builder
+ARG BUILD_DEPS=""
+RUN set -eux \
+ && echo "builder refresh: ${BUILD_DEPS}" \
+ && dnf -y install \
+        dnf-plugins-core \
+        rpm-build \
+        rpmdevtools \
+        cpio \
+        tar \
+        xz \
+        git \
+        perl \
+        which \
+ && dnf -y download --source --destdir /src kernel \
+ && rpm -i /src/kernel-*.src.rpm \
+ && dnf -y builddep /root/rpmbuild/SPECS/kernel.spec \
+ && dnf clean all \
+ && rm -rf /src /root/rpmbuild
+
+FROM builder AS kernel
+ARG FORCE_REFRESH=""
+COPY scripts/minimalize-config.sh /scripts/minimalize-config.sh
+RUN set -eux \
+ && echo "kernel refresh: ${FORCE_REFRESH}" \
+ && dnf -y download --source --destdir /src kernel \
+ && rpm -i /src/kernel-*.src.rpm \
+ && dnf -y builddep /root/rpmbuild/SPECS/kernel.spec \
+ && dnf clean all \
+ && rm -rf /src \
+ && cd /root/rpmbuild/SPECS \
+ && CFG=/root/rpmbuild/SOURCES/kernel-x86_64-fedora.config \
+ && echo "Original config: $(wc -l < "$CFG") lines, $(grep -c '=m$' "$CFG") modules" \
+ && bash /scripts/minimalize-config.sh "$CFG" "$CFG.minimal" \
+ && mv "$CFG.minimal" "$CFG" \
+ && echo "Minimal config: $(wc -l < "$CFG") lines, $(grep -c '=m$' "$CFG") modules" \
+ && echo "=== Critical options verification ===" \
+ && grep -E '^(CONFIG_XEN=|CONFIG_XEN_PV=|CONFIG_XEN_NETDEV_FRONTEND=|CONFIG_XEN_BLKDEV_FRONTEND=|CONFIG_VSOCKETS=|CONFIG_VIRTIO_VSOCKETS=|CONFIG_BTRFS_FS=|CONFIG_EXT4_FS=|CONFIG_SECURITY_SELINUX=)' "$CFG" | tail -15 \
+ && R=$(awk '/^%define specrelease /{print $3; exit}' kernel.spec) \
+ && R=${R%%[!0-9]*} \
+ && sed -i "s/^%define specrelease ${R}%/\%define specrelease $((R + 1))%/" kernel.spec \
+ && grep '^%define specrelease' kernel.spec \
+ && sed -i 's|^%define make %{__make} %{?cross_opts} %{?make_opts} HOSTCFLAGS=|%define make %{__make} %{?cross_opts} %{?make_opts} ISA_LEVEL=4 HOSTCFLAGS=|' kernel.spec \
+ && grep -n 'ISA_LEVEL=4' kernel.spec \
+ && sed -i "s/-w -n -c/-w -n -i/g" kernel.spec \
+ && echo "=== Config validation will print errors but not fail (-i flag) ===" \
+ && grep -n "OPTS=" kernel.spec | head -3
+
+# --without debug: build only the stock base kernel variant.
+# --without headers/tools/perf/doc/kmap: drop subpackages we never install.
+FROM kernel AS build
+RUN set -eux \
+ && cd /root/rpmbuild/SPECS \
+ && rpmbuild -ba --without debuginfo --without debug --without selftests \
+            --without headers --without tools --without perf --without doc \
+            --without kmap kernel.spec \
+
+ && cd /root/rpmbuild/RPMS/x86_64 \
+ && KVER=$(ls kernel-core-*.x86_64.rpm | head -1 | sed 's/^kernel-core-//; s/\.x86_64\.rpm$//') \
+ && echo "$KVER" > /tmp/kernel_version.txt \
+ && mkdir -p /out \
+ && for p in kernel kernel-core kernel-modules kernel-modules-core; do \
+        if [ -f "${p}-${KVER}.x86_64.rpm" ]; then \
+            cp "${p}-${KVER}.x86_64.rpm" /out/; \
+        else \
+            echo "WARNING: ${p}-${KVER}.x86_64.rpm not found"; \
+        fi; \
+    done \
+ && if [ -f "kernel-modules-extra-${KVER}.x86_64.rpm" ]; then \
+        cp "kernel-modules-extra-${KVER}.x86_64.rpm" /out/; \
+        echo "kernel-modules-extra present (unexpected for minimal build)"; \
+    fi \
+ && cp /tmp/kernel_version.txt /out/ \
+ && rm -rf /root/rpmbuild/BUILD \
+ && echo "=== Output RPMs ===" \
+ && ls -lh /out/

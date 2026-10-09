@@ -1,5 +1,5 @@
-# Minimal Xen guest kernel build — same structure as Dockerfile but
-# applies aggressive minimalization instead of just the vsock patch.
+# Minimal Xen PV guest kernel build — strips everything not needed for a
+# headless PV Xen guest running waypipe over TCP (no QEMU, no virtio, no vsock).
 #
 # Three stages, two cache domains (buildx + GHA layer cache):
 #
@@ -44,7 +44,9 @@ RUN set -eux \
  && mv "$CFG.minimal" "$CFG" \
  && echo "Minimal config: $(wc -l < "$CFG") lines, $(grep -c '=m$' "$CFG") modules" \
  && echo "=== Critical options verification ===" \
- && grep -E '^(CONFIG_XEN=|CONFIG_XEN_PV=|CONFIG_XEN_NETDEV_FRONTEND=|CONFIG_XEN_BLKDEV_FRONTEND=|CONFIG_VSOCKETS=|CONFIG_VIRTIO_VSOCKETS=|CONFIG_BTRFS_FS=|CONFIG_EXT4_FS=|CONFIG_SECURITY_SELINUX=)' "$CFG" | tail -15 \
+ && grep -E '^(CONFIG_XEN=|CONFIG_XEN_PV=|CONFIG_XEN_NETDEV_FRONTEND=|CONFIG_XEN_BLKDEV_FRONTEND=|CONFIG_XEN_CONSOLE_FRONTEND=|CONFIG_BTRFS_FS=|CONFIG_EXT4_FS=|CONFIG_SECURITY_SELINUX=)' "$CFG" | tail -10 \
+ && echo "=== VSOCK/VIRTIO should be disabled ===" \
+ && grep -E '^# (CONFIG_VSOCKETS|CONFIG_VIRTIO_VSOCKETS|CONFIG_VIRTIO_NET|CONFIG_VIRTIO) is not set' "$CFG" | head -5 \
  && R=$(awk '/^%define specrelease /{print $3; exit}' kernel.spec) \
  && R=${R%%[!0-9]*} \
  && sed -i "s/^%define specrelease ${R}%/\%define specrelease $((R + 1))%/" kernel.spec \

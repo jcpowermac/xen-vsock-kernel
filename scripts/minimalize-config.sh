@@ -432,6 +432,19 @@ should_disable() {
         return 0
     fi
 
+    # ===== VSOCK — PV guests use TCP over xen-netfront, no vsock needed =====
+    if [[ "$opt" == VSOCKETS ]] || [[ "$opt" == VSOCKETS_* ]] || \
+       [[ "$opt" == VIRTIO_VSOCKETS ]] || [[ "$opt" == VHOST_VSOCK ]] || \
+       [[ "$opt" == VSOCKMON ]] || [[ "$opt" == HYPERV_VSOCKETS ]] || \
+       [[ "$opt" == VMWARE_VMCI_VSOCKETS ]]; then
+        return 0
+    fi
+
+    # ===== VIRTIO — no QEMU backend in PV setup, use Xen PV drivers instead =====
+    if [[ "$opt" == VIRTIO ]] || [[ "$opt" == VIRTIO_* ]]; then
+        return 0
+    fi
+
     # ===== XEN BACKENDS — guests don't run backends =====
     if [[ "$opt" == XEN_*_BACKEND* ]] || [[ "$opt" == XEN_PCIDEV_BACKEND ]] || \
        [[ "$opt" == XEN_WDT ]] || [[ "$opt" == XEN_FBDEV_FRONTEND ]] || \
@@ -449,11 +462,7 @@ should_disable() {
         esac
     fi
 
-    # ===== VSOCK TRANSPORTS — keep only virtio =====
-    if [[ "$opt" == HYPERV_VSOCKETS ]] || [[ "$opt" == VMWARE_VMCI_VSOCKETS ]] || \
-       [[ "$opt" == VHOST_VSOCK ]] || [[ "$opt" == VSOCKMON ]]; then
-        return 0
-    fi
+
 
     # ===== DEBUG/TRACE — keep essentials =====
     if [[ "$opt" == FTRACE ]] || [[ "$opt" == DYNAMIC_FTRACE ]] || \
@@ -629,13 +638,10 @@ done < "$INPUT"
 # Force required options (last-value-wins)
 cat <<'EOF'
 
-# Minimal Xen guest kernel overrides
+# Minimal Xen PV guest kernel overrides
 CONFIG_XEN_NETDEV_FRONTEND=y
 CONFIG_XEN_BLKDEV_FRONTEND=y
-CONFIG_VSOCKETS=y
-CONFIG_VSOCKETS_LOOPBACK=y
-CONFIG_VIRTIO_VSOCKETS=y
-CONFIG_VIRTIO_NET=y
+CONFIG_XEN_CONSOLE_FRONTEND=y
 CONFIG_BTRFS_FS=y
 CONFIG_EXT4_FS=y
 CONFIG_DEBUG_FS=y
@@ -654,7 +660,6 @@ CONFIG_XEN=y
 CONFIG_XEN_PV=y
 CONFIG_XEN_PVHVM=y
 CONFIG_XEN_PVH=y
-CONFIG_XEN_VIRTIO=y
 
 # Options the kernel config system sets via dependency resolution
 # (must be explicitly set to avoid spec validation errors)

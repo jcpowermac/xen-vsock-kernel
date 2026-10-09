@@ -440,8 +440,29 @@ should_disable() {
         return 0
     fi
 
+    # ===== NETFILTER — not needed for waypipe guest =====
+    if [[ "$opt" == NETFILTER ]] || [[ "$opt" == NETFILTER_* ]]; then
+        return 0
+    fi
+
+    # ===== IIO — Industrial I/O, not needed in Xen =====
+    if [[ "$opt" == IIO ]] || [[ "$opt" == IIO_* ]] || [[ "$opt" == INDUSTRIALIO ]]; then
+        return 0
+    fi
+
     # ===== VIRTIO — no QEMU backend in PV setup, use Xen PV drivers instead =====
     if [[ "$opt" == VIRTIO ]] || [[ "$opt" == VIRTIO_* ]]; then
+        return 0
+    fi
+
+    # ===== REAL HARDWARE NETWORK — PV guest only uses xen-netfront =====
+    if [[ "$opt" == ETHERNET ]] || [[ "$opt" == PHYLIB ]] || [[ "$opt" == MDIO ]] || \
+       [[ "$opt" == MDIO_* ]] || [[ "$opt" == PHY_* ]] || [[ "$opt" == WIRELESS ]] || \
+       [[ "$opt" == WLAN ]] || [[ "$opt" == CFG80211 ]] || [[ "$opt" == RFKILL ]] || \
+       [[ "$opt" == BLUETOOTH ]] || [[ "$opt" == BT ]] || [[ "$opt" == FIREWIRE ]] || \
+       [[ "$opt" == IEEE1394 ]] || [[ "$opt" == WAN ]] || [[ "$opt" == PPP ]] || \
+       [[ "$opt" == SLIP ]] || [[ "$opt" == ATM ]] || [[ "$opt" == HAMRADIO ]] || \
+       [[ "$opt" == PHONE ]] || [[ "$opt" == USB_NET ]] || [[ "$opt" == NET_VENDOR_* ]]; then
         return 0
     fi
 
@@ -487,6 +508,11 @@ should_disable() {
     # ===== SECURITY EXTRAS =====
     if [[ "$opt" == SECURITY_TOMOYO ]] || [[ "$opt" == SECURITY_IPE ]] || \
        [[ "$opt" == SECURITY_INFINIBAND ]]; then
+        return 0
+    fi
+
+    # ===== NVMEM — not needed in Xen =====
+    if [[ "$opt" == NVMEM ]] || [[ "$opt" == NVMEM_* ]]; then
         return 0
     fi
 
@@ -561,6 +587,77 @@ should_disable() {
        [[ "$opt" == BLK_DEV_PMEM ]] || \
        [[ "$opt" == INTEL_TH* ]] || [[ "$opt" == XILINX_PR_DECOUPLER ]] || \
        [[ "$opt" == INTEL_QEP ]]; then
+        return 0
+    fi
+
+    # ===== THERMAL — Xen handles thermal in dom0 =====
+    if [[ "$opt" == THERMAL ]] || [[ "$opt" == THERMAL_* ]] || \
+       [[ "$opt" == INT340X_* ]] || [[ "$opt" == X86_PKG_TEMP_THERMAL ]] || \
+       [[ "$opt" == INTEL_SOC_DTS_IOSF ]] || [[ "$opt" == ACPI_THERMAL_REL ]]; then
+        return 0
+    fi
+
+    # ===== NVME — PV guest uses xen-blkfront =====
+    if [[ "$opt" == NVME ]] || [[ "$opt" == NVME_* ]]; then
+        return 0
+    fi
+
+    # ===== SCSI TRANSPORTS — PV guest uses xen-blkfront =====
+    if [[ "$opt" == SCSI_TRANSPORT_* ]] || [[ "$opt" == SCSI_DH_* ]] || \
+       [[ "$opt" == RAID_CLASS ]]; then
+        return 0
+    fi
+
+    # ===== TCP CONGESTION — keep cubic (built-in) + bbr only =====
+    if [[ "$opt" == TCP_* ]] && [[ "$opt" != TCP_BBR ]] && \
+       [[ "$opt" != TCP_CONGESTION ]] && [[ "$opt" != TCP_MD5SIG ]] && \
+       [[ "$opt" != TCP_FACK ]] && [[ "$opt" != TCP_SACK ]] && \
+       [[ "$opt" != TCP_TIMESTAMPS ]] && [[ "$opt" != TCP_ECN ]] && \
+       [[ "$opt" != TCP_RFC1337 ]] && [[ "$opt" != TCP_ADV_WIN_SCALING ]]; then
+        return 0
+    fi
+
+    # ===== MISC DRIVERS — keep pvpanic, tpm, hangcheck-timer =====
+    if [[ "$opt" == EEPROM ]] || [[ "$opt" == EEPROM_* ]] || \
+       [[ "$opt" == CARDREADER ]] || [[ "$opt" == CARDREADER_* ]] || \
+       [[ "$opt" == UACCE ]] || [[ "$opt" == RPMB ]] || \
+       [[ "$opt" == NTSYNC ]] || [[ "$opt" == ISL29020 ]] || [[ "$opt" == ISL29003 ]] || \
+       [[ "$opt" == IBMASM ]] || [[ "$opt" == HP_ILO ]] || \
+       [[ "$opt" == DW_XDATA_PCIE ]] || [[ "$opt" == APDS9802ALS ]] || \
+       [[ "$opt" == ALTERA_STAPL ]] || [[ "$opt" == MCHP_PCI1XXXX ]] || \
+       [[ "$opt" == XILLYBUS ]] || [[ "$opt" == UV_MMtimer ]] || \
+       [[ "$opt" == TLCLK ]] || [[ "$opt" == IPMI ]] || [[ "$opt" == IPMI_* ]]; then
+        return 0
+    fi
+
+    # ===== HW_RANDOM — keep only virtio-rng (not available) and core =====
+    if [[ "$opt" == HW_RANDOM ]] || [[ "$opt" == HW_RANDOM_* ]]; then
+        case "$opt" in
+            HW_RANDOM_CORE|HW_RANDOM_TIMERIOT) return 1 ;;
+            *) return 0 ;;
+        esac
+    fi
+
+    # ===== X86 PLATFORM DEVICES — laptop/vendor specific, not needed in Xen =====
+    if [[ "$opt" == X86_PLATFORM_DEVICES ]] || [[ "$opt" == X86_ANDROID_TABLETS ]] || \
+       [[ "$opt" == X86_INTEL_PUNIT_IPC ]] || [[ "$opt" == X86_PKG_tempThr ]] || \
+       [[ "$opt" == ACPI_WMI ]] || [[ "$opt" == ACPI_TOSHIBA ]] || \
+       [[ "$opt" == ASUS_LAPTOP ]] || [[ "$opt" == ASUS_WIRELESS ]] || \
+       [[ "$opt" == DELL_LAPTOP ]] || [[ "$opt" == FUJITSU_LAPTOP ]] || \
+       [[ "$opt" == GPD_POCKET_FAN ]] || [[ "$opt" == EEPC_LAPTOP ]] || \
+       [[ "$opt" == THINKPAD_ACPI ]] || [[ "$opt" == TOSHIBA_BTC ]] || \
+       [[ "$opt" == TOSHIBA_HAPS ]] || [[ "$opt" == TOSHIBA_WMI ]] || \
+       [[ "$opt" == MSI_WMI ]] || [[ "$opt" == PANASONIC_LAPTOP ]] || \
+       [[ "$opt" == SONY_LAPTOP ]] || [[ "$opt" == COMPAQ_LAPTOP ]] || \
+       [[ "$opt" == HP_WMI ]] || [[ "$opt" == HP_ACCEL ]] || \
+       [[ "$opt" == INSPIRON_LAPTOP ]] || [[ "$opt" == IBM_RTL ]] || \
+       [[ "$opt" == JMICRON_ROBOTRAM ]] || [[ "$opt" == APPLE_GMUX ]] || \
+       [[ "$opt" == CHROMEOS_LAPTOP ]] || [[ "$opt" == CHROMEOS_PSTORE ]] || \
+       [[ "$opt" == SURFACE3_BUTTON ]] || [[ "$opt" == SURFACE_AGgregator ]] || \
+       [[ "$opt" == SURFACE_BUTTON ]] || [[ "$opt" == SURFACE_PRO3 ]] || \
+       [[ "$opt" == INTEL_OPS ]] || [[ "$opt" == INTEL_SCU ]] || \
+       [[ "$opt" == INTEL_SCU_IPC ]] || [[ "$opt" == INTEL_SCU_UTIL ]] || \
+       [[ "$opt" == INTEL_SPEED_SELECT_INTERFACE ]]; then
         return 0
     fi
 
@@ -661,16 +758,67 @@ CONFIG_XEN_PV=y
 CONFIG_XEN_PVHVM=y
 CONFIG_XEN_PVH=y
 
+# Disable parent categories that pull in unnecessary modules
+# (explicit =n required — default y options are re-enabled otherwise)
+CONFIG_NETFILTER=n
+CONFIG_NETFILTER_ADVANCED=n
+CONFIG_IIO=n
+CONFIG_INDUSTRIALIO=n
+CONFIG_MD=n
+CONFIG_BLK_DEV_MD=n
+CONFIG_THERMAL=n
+CONFIG_USB=n
+CONFIG_MMC=n
+CONFIG_NVMEM=n
+CONFIG_PWM=n
+CONFIG_HWMON=n
+CONFIG_POWER_SUPPLY=n
+CONFIG_WATCHDOG=n
+CONFIG_RAS=n
+CONFIG_EDAC=n
+CONFIG_FPGA=n
+CONFIG_VHOST=n
+CONFIG_VDPA=n
+CONFIG_VFIO=n
+CONFIG_TARGET_CORE=n
+CONFIG_NVME_CORE=n
+
+# Real hardware — PV guest has no real hardware
+CONFIG_ETHERNET=n
+CONFIG_PHYLIB=n
+CONFIG_MDIO=n
+CONFIG_X86_PLATFORM_DEVICES=n
+CONFIG_WIRELESS=n
+CONFIG_WLAN=n
+CONFIG_CFG80211=n
+CONFIG_RFKILL=n
+CONFIG_BLUETOOTH=n
+CONFIG_BT=n
+CONFIG_FIREWIRE=n
+CONFIG_IEEE1394=n
+CONFIG_MTD=n
+CONFIG_PARPORT=n
+CONFIG_PNP=n
+CONFIG_SERIO=n
+CONFIG_HID=n
+CONFIG_INPUT=n
+CONFIG_XEN_PCIDEV_FRONTEND=n
+CONFIG_VIRTIO_PCI=n
+CONFIG_STAGING=n
+CONFIG_USB_NET=n
+CONFIG_WAN=n
+CONFIG_PHONE=n
+CONFIG_PPP=n
+CONFIG_SLIP=n
+CONFIG_ATM=n
+CONFIG_HAMRADIO=n
+
 # Options the kernel config system sets via dependency resolution
 # (must be explicitly set to avoid spec validation errors)
 CONFIG_KCMP=n
-CONFIG_NET_EMATCH_STACK=32
 CONFIG_SERIAL_8250_NR_UARTS=4
 CONFIG_SERIAL_8250_RUNTIME_UARTS=4
-CONFIG_GPIOLIB_FASTPATH_LIMIT=512
-CONFIG_THERMAL_EMERGENCY_POWEROFF_DELAY_MS=0
 CONFIG_INTEL_PMT_DISCOVERY=n
-CONFIG_IIO_CONSUMERS_PER_TRIGGER=2
 CONFIG_NLS_DEFAULT="iso8859-1"
 CONFIG_MSEAL_SYSTEM_MAPPINGS=n
 CONFIG_IRQ_POLL=n
@@ -680,31 +828,8 @@ CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
 CONFIG_SYN_COOKIES=y
 CONFIG_IPV6_TUNNEL=m
 CONFIG_FAILOVER=y
-CONFIG_REGMAP_I2C=m
-CONFIG_PHYLINK=m
 CONFIG_NET_FAILOVER=y
-CONFIG_INPUT_SPARSEKMAP=m
-CONFIG_SERIO=m
 CONFIG_SERIAL_CORE_CONSOLE=y
-CONFIG_I2C=m
-CONFIG_I2C_MUX=m
-CONFIG_GPIOLIB=y
-CONFIG_POWER_SUPPLY=y
-CONFIG_HWMON=m
-CONFIG_THERMAL_NETLINK=y
-CONFIG_THERMAL_DEFAULT_GOV_FAIR_SHARE=y
-CONFIG_THERMAL_GOV_FAIR_SHARE=y
-CONFIG_MFD_CORE=m
-CONFIG_CHARLCD_BL_FLASH=y
-CONFIG_BACKLIGHT_CLASS_DEVICE=m
-CONFIG_LEDS_CLASS=m
-CONFIG_LEDS_TRIGGERS=y
-CONFIG_IIO_BUFFER=y
-CONFIG_IIO_BUFFER_CB=m
-CONFIG_IIO_KFIFO_BUF=m
-CONFIG_IIO_TRIGGERED_BUFFER=m
-CONFIG_IIO_TRIGGER=y
-CONFIG_RAS=y
 CONFIG_SUNRPC=m
 CONFIG_SUNRPC_GSS=m
 CONFIG_NLS_UCS2_UTILS=m

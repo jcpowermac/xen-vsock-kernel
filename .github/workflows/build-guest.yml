@@ -74,14 +74,17 @@ jobs:
           tag_name: kernel-xenguest-${{ needs.build.outputs.kver }}
           name: kernel-xenguest-${{ needs.build.outputs.kver }}
           body: |
-            Minimal Fedora 44 kernel for Xen guest VMs only.
-            Stripped of ~70% of modules (sound, USB, GPU, storage controllers,
-            wireless, input, non-Xen hypervisors). Built from the official
-            F44 src.rpm with the release bumped +1. x86-64-v4 ISA target.
+            Minimal Fedora 44 kernel for Xen PV/PVH guest VMs only.
+            Stripped of ~86% of modules (sound, USB, GPU, storage controllers,
+            wireless, input, non-Xen hypervisors, NETFILTER, Ethernet PHY,
+            thermal, NVMe, IIO). Built from the official F44 src.rpm with
+            the release bumped +1. x86-64-v4 ISA target.
 
-            **vsock support**: `CONFIG_VSOCKETS=y` + `CONFIG_VIRTIO_VSOCKETS=y`
-            (bridged by `CONFIG_XEN_VIRTIO=y`). Configure Xen to expose a
-            virtio-vsock device to the guest.
+            **PV drivers**: xen-blkfront, xen-netfront, xen console frontend
+            (all built-in for initramfs).
+
+            **Root filesystem**: XFS with ostree deployment.
+            Generate initramfs with `dracut -f --add ostree`.
 
             Unsigned (consumed only by our own image builds).
           files: rpms/*.rpm

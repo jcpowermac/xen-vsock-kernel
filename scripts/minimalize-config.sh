@@ -742,7 +742,8 @@ for opt in XEN_NETDEV_FRONTEND XEN_BLKDEV_FRONTEND XEN_CONSOLE_FRONTEND \
            XEN XEN_PV XEN_PVHVM XEN_PVH HYPERVISOR_GUEST TIMERFD \
            BTRFS_FS_POSIX_ACL OVERLAY_FS \
            DM DM_INIT DM_UEVENT DM_SNAPSHOT DM_ZERO DM_VERITY MD \
-           NAMESPACES UTS_NS IPC_NS PID_NS NET_NS USER_NS CGROUP_NS TIME_NS; do
+           NAMESPACES UTS_NS IPC_NS PID_NS NET_NS USER_NS CGROUP_NS TIME_NS \
+           BLK_DEV_ZONED BLK_CGROUP BLK_DEV_THROTTLING; do
     sed -i "/^CONFIG_${opt}=/d; /^# CONFIG_${opt} is not set/d" "$OUTPUT"
 done
 
@@ -790,6 +791,9 @@ CONFIG_NET_NS=y
 CONFIG_USER_NS=y
 CONFIG_CGROUP_NS=y
 CONFIG_TIME_NS=y
+CONFIG_BLK_DEV_ZONED=y
+CONFIG_BLK_CGROUP=y
+CONFIG_BLK_DEV_THROTTLING=y
 
 # Disable parent categories that pull in unnecessary modules
 # (explicit =n required — default y options are re-enabled otherwise)

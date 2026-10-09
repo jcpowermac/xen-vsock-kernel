@@ -1,62 +1,96 @@
 # xen-vsock-kernel
 
-Fedora 44 kernel RPMs with `CONFIG_XEN_VSOCKETS=y`, compiled for
-**x86-64-v4** (CachyOS-style ISA targeting — both endpoints, dom0 and
-guest, run on recent v4-capable hardware).
+Minimal **PV/PVH Xen guest** kernel for Fedora 44, stripped down from the
+stock Fedora kernel for use in lightweight VMs. No QEMU, no libvirt, no
+virtio — pure PV/PVH with Xen paravirtualized drivers (xen-blkfront,
+xen-netfront).
 
-Stock F44 kernels build vsock as a module and leave the Xen transport
-off, so Xen guests and their dom0 have no vsock channel at all. This repo
-builds the official F44 kernel with the vsock core and the Xen transport
-built in (`CONFIG_VSOCKETS=y`, `CONFIG_XEN_VSOCKETS=y`). The built kernel
-is what `qlvm`'s `vm run --connect vsock` waypipe channel needs on both
-ends (guest image and dom0).
+## Why minimal?
+
+The stock Fedora kernel has 4,551 modules (~247M RPMs). A PV guest VM only
+needs a fraction of that. This repo builds a minimal kernel with:
+
+- **643 modules** (86% reduction)
+- **~26M total RPM size** (90% reduction)
+- **12M vmlinuz** (vs 19M stock)
+- **24M initramfs** (vs 103M stock)
+
+## Architecture
+
+- **VM type:** PVH (qlvm uses `LIBXL_DOMAIN_TYPE_PVH`)
+- **Disk:** xen-blkfront (`CONFIG_XEN_BLKDEV_FRONTEND=y`, built-in)
+- **Network:** xen-netfront (`CONFIG_XEN_NETDEV_FRONTEND=y`, built-in)
+- **Root filesystem:** XFS (`CONFIG_XFS_FS=y`) with ostree deployment
+- **Waypipe:** TCP over xen-netfront (no vsock, no virtio)
 
 ## The build
 
-The `Dockerfile` is the whole build, in three stages:
+Three-stage `Dockerfile.guest`:
 
-1. **builder** — rpmbuild toolchain + the kernel's build deps. Layer-cached
-   across runs (buildx + GHA layer cache), so repeat builds skip the
-   package pulls; `dnf` only installs what a newer kernel needs that is
-   missing (an update, not a re-pull). Bump the `build_deps` dispatch
-   input only if a build fails on a missing build dep.
-2. **kernel** — re-resolves **whatever kernel the Fedora 44 repo currently
-   serves** (no pinning — like `dnf update kernel`), applies our delta:
-   the two vsock config lines, release +1 (so `7.2.8-201.fc44` sorts
-   after the stock `7.2.8-200.fc44` and both coexist in the same image),
-   and `ISA_LEVEL=4` in the spec's make wrapper (vmlinux + modules get
-   `-march=x86-64-v4`).
-3. **build** — `rpmbuild` (~1-2 h on a 2-vCPU runner), then collects the
-   five RPMs into `/out`.
+1. **builder** — rpmbuild toolchain + kernel build deps (layer-cached)
+2. **kernel** — resolves current Fedora 44 kernel, applies `scripts/minimalize-config.sh` to strip unused subsystems, builds with `ISA_LEVEL=4`
+3. **build** — `rpmbuild`, collects RPMs into `/out`
 
-`build.yml` runs the buildx build and copies the RPMs out.
+`build-guest.yml` runs the build and publishes as `kernel-xenguest-<VER>`.
 
-## Building
+## Critical kernel options
 
-Dispatch Actions → `build` (no inputs needed). When Fedora ships a newer
-kernel, just re-dispatch — the container rebuild picks up the new kernel.
-On success the five consumer packages land as a GitHub release tagged
-`kernel-<built-NEVR>`: `kernel`, `kernel-core`, `kernel-modules`,
-`kernel-modules-core`, `kernel-modules-extra`.
+These must be built-in (`=y`) for the PVH guest to boot:
 
-## Consuming (blue-build recipes)
+- `CONFIG_HYPERVISOR_GUEST=y` — Xen PVH loader requires this
+- `CONFIG_XEN=y`, `CONFIG_XEN_PV=y`, `CONFIG_XEN_PVHVM=y`, `CONFIG_XEN_PVH=y`
+- `CONFIG_XEN_BLKDEV_FRONTEND=y` — PV disk driver
+- `CONFIG_XEN_NETDEV_FRONTEND=y` — PV network driver
+- `CONFIG_XEN_CONSOLE_FRONTEND=y` — PV console (hvc0)
+- `CONFIG_XFS_FS=y` — root filesystem is XFS
+- `CONFIG_BTRFS_FS=y`, `CONFIG_BTRFS_FS_POSIX_ACL=y` — ostree support
+- `CONFIG_OVERLAY_FS=y` — ostree root layers
+- `CONFIG_MD=y`, `CONFIG_DM=y` + DM sub-options — device-mapper for ostree
+- `CONFIG_TIMERFD=y`, `CONFIG_NAMESPACES=y` + sub-namespaces — systemd in initramfs
 
-Install the release assets by URL with the `dnf` module — no yum repo,
-no signing keys (unsigned build, consumed only by our own image builds):
+## Initramfs
 
-```yaml
-  - type: dnf
-    install:
-      packages:
-        - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-7.2.8-201.fc44/kernel-7.2.8-201.fc44.x86_64.rpm
-        - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-7.2.8-201.fc44/kernel-core-7.2.8-201.fc44.x86_64.rpm
-        - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-7.2.8-201.fc44/kernel-modules-7.2.8-201.fc44.x86_64.rpm
-        - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-7.2.8-201.fc44/kernel-modules-core-7.2.8-201.fc44.x86_64.rpm
-        # dom0 only (r8169 uplink driver lives in modules-extra):
-        - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-7.2.8-201.fc44/kernel-modules-extra-7.2.8-201.fc44.x86_64.rpm
+The initramfs must include ostree modules for the ostree deployment to boot:
+
+```bash
+dracut -f --add ostree /out/initramfs-xenguest "$KVER"
 ```
 
-- Guest images (`bolt.yml`): the first four are enough (netfront/blkfront
-  are in modules-core).
-- Dom0 (`recipe.yml`): include `kernel-modules-extra` too — the dom0's
-  uplink is an r8169 Realtek NIC, which ships in that subpackage.
+## Building locally
+
+```bash
+podman build -t xen-guest-kernel:local -f Dockerfile.guest .
+# Extract RPMs
+CONTAINER=$(podman create xen-guest-kernel:local)
+podman cp "$CONTAINER":/out/. /tmp/rpms/
+podman rm "$CONTAINER"
+# Generate initramfs (in Fedora 44 container)
+dnf install dracut ostree
+rpm -i /tmp/rpms/kernel-core-*.rpm /tmp/rpms/kernel-modules-*.rpm /tmp/rpms/kernel-modules-core-*.rpm
+dracut -f --add ostree /out/initramfs-xenguest "$(ls /lib/modules/)"
+```
+
+## Consuming
+
+Install the release assets via `dnf` module in blue-build recipes:
+
+```yaml
+- type: dnf
+  install:
+    packages:
+      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-core-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-core-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-extra-7.2.9-201.fc44.x86_64.rpm
+```
+
+## Stripped subsystems
+
+Disabled to reduce module count: sound, GPU (DRM/KMS), Bluetooth, WiFi,
+Ethernet (non-PV), PHYLIB, MDIO, NETFILTER, thermal, NVMe, NVMEM, IIO,
+x86 platform devices, USB, firewire, PCI Express hotplug, SCSI transports
+(kept for safety), most TCP congestion algorithms (kept cubic + bbr).
+
+Kept: TPM, hw_random, pvpanic, hangcheck-timer, SELinux, audit, IMA/EVM,
+crypto, wireguard, tap, netconsole.

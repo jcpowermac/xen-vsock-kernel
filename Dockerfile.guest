@@ -51,9 +51,9 @@ RUN set -eux \
  && R=${R%%[!0-9]*} \
  && sed -i "s/^%define specrelease ${R}%/\%define specrelease $((R + 1))%/" kernel.spec \
  && grep '^%define specrelease' kernel.spec \
- && sed -i 's|^%define make %{__make} %{?cross_opts} %{?make_opts} HOSTCFLAGS=|%define make %{__make} %{?cross_opts} %{?make_opts} ISA_LEVEL=4 HOSTCFLAGS=|' kernel.spec \
- && grep -n 'ISA_LEVEL=4' kernel.spec \
+
  && sed -i "s/-w -n -c/-w -n -i/g" kernel.spec \
+ && sed -i 's|%pesign -s -i \$SignImage -o vmlinuz.signed.*|cp \$SignImage vmlinuz.signed|' kernel.spec \
  && echo "=== Config validation will print errors but not fail (-i flag) ===" \
  && grep -n "OPTS=" kernel.spec | head -3
 

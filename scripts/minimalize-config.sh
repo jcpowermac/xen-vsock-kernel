@@ -734,15 +734,28 @@ while IFS= read -r line || [ -n "$line" ]; do
     fi
 done < "$INPUT"
 
-# Force required options (last-value-wins)
-cat <<'EOF'
+# Force required options — remove any existing entries first (kernel config
+# keeps the FIRST value for duplicates, so we must remove conflicting lines)
+for opt in XEN_NETDEV_FRONTEND XEN_BLKDEV_FRONTEND XEN_CONSOLE_FRONTEND \
+           BTRFS_FS EXT4_FS DEBUG_FS KALLSYMS SECURITY_SELINUX AUDIT \
+           IMA EVM INTEGRITY PM CPU_FREQ CPU_IDLE EFI EFI_STUB \
+           XEN XEN_PV XEN_PVHVM XEN_PVH HYPERVISOR_GUEST TIMERFD \
+           BTRFS_FS_POSIX_ACL OVERLAY_FS \
+           NAMESPACES UTS_NS IPC_NS PID_NS NET_NS USER_NS CGROUP_NS TIME_NS; do
+    sed -i "/^CONFIG_${opt}=/d; /^# CONFIG_${opt} is not set/d" "$OUTPUT"
+done
+
+# Minimal Xen PV guest kernel overrides (no conflicts — clean slate)
+cat >> "$OUTPUT" <<'EOF'
 
 # Minimal Xen PV guest kernel overrides
 CONFIG_XEN_NETDEV_FRONTEND=y
 CONFIG_XEN_BLKDEV_FRONTEND=y
 CONFIG_XEN_CONSOLE_FRONTEND=y
 CONFIG_BTRFS_FS=y
+CONFIG_BTRFS_FS_POSIX_ACL=y
 CONFIG_EXT4_FS=y
+CONFIG_OVERLAY_FS=y
 CONFIG_DEBUG_FS=y
 CONFIG_KALLSYMS=y
 CONFIG_SECURITY_SELINUX=y
@@ -760,6 +773,15 @@ CONFIG_XEN_PV=y
 CONFIG_XEN_PVHVM=y
 CONFIG_XEN_PVH=y
 CONFIG_HYPERVISOR_GUEST=y
+CONFIG_TIMERFD=y
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_USER_NS=y
+CONFIG_CGROUP_NS=y
+CONFIG_TIME_NS=y
 
 # Disable parent categories that pull in unnecessary modules
 # (explicit =n required — default y options are re-enabled otherwise)

@@ -78,11 +78,11 @@ Install the release assets via `dnf` module in blue-build recipes:
 - type: dnf
   install:
     packages:
-      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-7.2.9-201.fc44.x86_64.rpm
-      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-core-7.2.9-201.fc44.x86_64.rpm
-      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-7.2.9-201.fc44.x86_64.rpm
-      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-core-7.2.9-201.fc44.x86_64.rpm
-      - https://github.com/jcpowermac/xen-vsock-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-extra-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-guest-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-guest-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-core-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-guest-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-guest-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-core-7.2.9-201.fc44.x86_64.rpm
+      - https://github.com/jcpowermac/xen-guest-kernel/releases/download/kernel-xenguest-7.2.9-201.fc44/kernel-modules-extra-7.2.9-201.fc44.x86_64.rpm
 ```
 
 ## Stripped subsystems

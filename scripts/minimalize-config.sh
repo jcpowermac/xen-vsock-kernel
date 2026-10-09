@@ -22,6 +22,8 @@ should_disable() {
     fi
 
     # ===== GPU/Display — Xen provides virtual framebuffer =====
+    # Keep FB_EFI — needed for proper x86_64 boot flags
+    [[ "$opt" == FB_EFI ]] && return 1
     if [[ "$opt" == DRM* ]] || [[ "$opt" == FB_* ]] || [[ "$opt" == VGA_CONSOLE ]] || \
        [[ "$opt" == VIDEO* ]] || [[ "$opt" == GSPMI* ]] || [[ "$opt" == MIPI* ]] || \
        [[ "$opt" == MEDIA* ]] || [[ "$opt" == DVB_* ]] || [[ "$opt" == V4L* ]] || \
@@ -757,6 +759,7 @@ CONFIG_XEN=y
 CONFIG_XEN_PV=y
 CONFIG_XEN_PVHVM=y
 CONFIG_XEN_PVH=y
+CONFIG_HYPERVISOR_GUEST=y
 
 # Disable parent categories that pull in unnecessary modules
 # (explicit =n required — default y options are re-enabled otherwise)

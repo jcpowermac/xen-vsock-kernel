@@ -1,4 +1,4 @@
-# xen-vsock-kernel
+# xen-guest-kernel
 
 Minimal **PV/PVH Xen guest** kernel for Fedora 44, stripped down from the
 stock Fedora kernel for use in lightweight VMs. No QEMU, no libvirt, no
